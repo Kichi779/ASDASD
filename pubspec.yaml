@@ -12,20 +12,20 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
 
-  # Gerekli paketler (bunlar olmadan hata alırsın)
+  # Sürümleri en güncel ve stabil hallerine çektik
   webview_flutter: ^4.9.0
-  shared_preferences: ^2.3.2
-  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.5 # Crash riskine karşı güncel tutuyoruz
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^5.0.0 # Proje SDK'nıza daha uygun sürüm
 
 flutter:
   uses-material-design: true
 
-  # Logo ve diğer resimler için assets klasörü
+  # Assets hizalaması çok önemlidir, boşluklara dikkat!
   assets:
     - assets/
-    - assets/app_logo.png   # varsa logo buraya gelecekt
+    - assets/app_logo.png
