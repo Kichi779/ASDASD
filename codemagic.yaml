@@ -1,71 +1,52 @@
-# codemagic.yaml
 workflows:
   ios-workflow:
     name: Uluslararasi Alevi Vakfi iOS Build
-    # M2 makineler daha hızlıdır ve yeni Xcode sürümleriyle daha uyumludur
-    instance_type: mac_mini_m2 
+    instance_type: mac_mini_m2
     max_build_duration: 60
     
+    # HATAYI ÇÖZEN KRİTİK EKLENTİ:
+    integrations:
+      app_store_connect: alevi-vakfi # Buraya Codemagic panelinde verdiğin entegrasyon adını yaz (Genelde 'alevi-vakfi' veya 'default')
+
     environment:
       groups:
-        # Codemagic UI üzerinden oluşturduğun sertifika grubunun adını buraya yaz 
-        # (Örn: app_store_credentials)
-        - app_store_credentials 
+        - app_store_credentials # Bu grubun App Store Connect API Keylerini içerdiğinden emin ol
+      vars:
+        BUNDLE_ID: "com.alevivakfi.uade"
       flutter: stable
       xcode: latest
       cocoapods: default
 
-    cache:
-      cache_paths:
-        - ~/.pub-cache
-        - ios/Pods
-
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'main' # Sadece main branch'ine push gelince çalışır
-          include: true
-
     scripts:
-      - name: Flutter SDK ve Paket Kurulumu
+      - name: Flutter SDK Paket Kurulumu
         script: |
           flutter pub get
-          # Bağımlılıkların temiz olduğundan emin olalım
           flutter clean
           flutter pub get
 
-      - name: iOS Yapılandırma Dosyalarını Zorla Oluştur (podhelper.rb fix)
+      - name: iOS Yapılandırma ve Bağımlılık Onarımı (0 Dependencies Fix)
         script: |
-          # Bu komut sertifika sormadan ios klasörünü ve podhelper.rb dosyasını hazırlar
-          # Yaşadığın "Module not found" hatasının ana çözümü burasıdır.
+          # Sertifika hatası almadan podhelper.rb dosyasını oluşturur
           flutter build ios --config-only --no-codesign
-
-      - name: Apple Sertifikalarını Yükle
-        script: |
-          # Codemagic'in otomatik kod imzalama aracını çalıştırır
-          # Bu adım export_options.plist dosyasını otomatik oluşturur
-          xcode-project use-profiles
-
-      - name: CocoaPods Kurulumu (Temiz Build)
-        script: |
           cd ios
-          # Windows'tan gelebilecek hatalı kilit dosyalarını temizle
           rm -rf Pods Podfile.lock
-          # Repo update ile en güncel plugin sürümlerini çek
           pod install --repo-update
           cd ..
 
-      - name: Flutter IPA Build
+      - name: Apple Sertifikalarını Yapılandır
         script: |
-          # 'use-profiles' adımının oluşturduğu export_options.plist dosyasını kullanıyoruz
-          flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist
+          # Bu komut Apple Developer portalından doğru profilleri çeker
+          xcode-project use-profiles --bundle-id $BUNDLE_ID --export-method app-store
+
+      - name: Flutter IPA Build (Release Modu)
+        script: |
+          # build ipa komutu otomatik olarak imzalama yapar
+          flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
 
     publishing:
-      # Build başarılı olunca Apple'a (TestFlight) otomatik gönderir
       app_store_connect:
-        auth: integration
+        auth: integration # Yukarıdaki 'integrations' bloğu ile eşleşir
+        submit_to_testflight: true
