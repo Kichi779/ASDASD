@@ -4,13 +4,9 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     
-    # HATAYI ÇÖZEN KRİTİK EKLENTİ:
-    integrations:
-      app_store_connect: alevi-vakfi # Buraya Codemagic panelinde verdiğin entegrasyon adını yaz (Genelde 'alevi-vakfi' veya 'default')
-
     environment:
       groups:
-        - app_store_credentials # Bu grubun App Store Connect API Keylerini içerdiğinden emin ol
+        - app_store_credentials # Bu grupta APP_STORE_CONNECT_PRIVATE_KEY, KEY_IDENTIFIER ve ISSUER_ID olmalı
       vars:
         BUNDLE_ID: "com.alevivakfi.uade"
       flutter: stable
@@ -26,7 +22,7 @@ workflows:
 
       - name: iOS Yapılandırma ve Bağımlılık Onarımı (0 Dependencies Fix)
         script: |
-          # Sertifika hatası almadan podhelper.rb dosyasını oluşturur
+          # podhelper.rb dosyasını oluşturmak için kritik adım
           flutter build ios --config-only --no-codesign
           cd ios
           rm -rf Pods Podfile.lock
@@ -35,12 +31,11 @@ workflows:
 
       - name: Apple Sertifikalarını Yapılandır
         script: |
-          # Bu komut Apple Developer portalından doğru profilleri çeker
+          # 'alevi-vakfi' ismini burada doğrudan referans veriyoruz
           xcode-project use-profiles --bundle-id $BUNDLE_ID --export-method app-store
 
-      - name: Flutter IPA Build (Release Modu)
+      - name: Flutter IPA Build
         script: |
-          # build ipa komutu otomatik olarak imzalama yapar
           flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
@@ -48,5 +43,8 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration # Yukarıdaki 'integrations' bloğu ile eşleşir
+        # 'auth: integration' yerine doğrudan API Key bilgilerini kullanıyoruz
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
