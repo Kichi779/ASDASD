@@ -1,19 +1,72 @@
-environment:
-  groups:
-    - app_store_credentials
-  vars:
-    XCODE_BUNDLE_ID: "com.alevivakfi.uade"
-  ios_signing:
-    distribution_type: app_store
-    bundle_identifier: com.alevivakfi.uade
-  flutter: stable
-  xcode: latest
+# codemagic.yaml
+workflows:
+  ios-workflow:
+    name: Uluslararasi Alevi Vakfi iOS Build
+    instance_type: mac_mini_m2 # Daha hızlı ve kararlı build için M2
+    max_build_duration: 60
+    
+    environment:
+      groups:
+        - app_store_credentials # Bu grup adını Codemagic panelinde oluşturun
+      vars:
+        XCODE_BUNDLE_ID: "com.alevivakfi.uade"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.alevivakfi.uade
+      flutter: stable
+      xcode: latest
+      cocoapods: default
 
-scripts:
-  # ... (pub get ve pod install adımları aynı kalsın) ...
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ios/Pods
 
-  - name: Apple Sertifikalarini Yapilandir
-    script: |
-      # --auth-type=api_key ekleyerek Codemagic'e portalına erişim yetkisi veriyoruz
-      # Bu sayede eksik profilleri kendisi de oluşturabilir/çekebilir.
-      xcode-project use-profiles --bundle-id com.alevivakfi.uade --export-method app-store
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: '*'
+          include: true
+
+    scripts:
+      - name: Flutter SDK Paket Kurulumu
+        script: |
+          flutter pub get
+          flutter clean
+          flutter pub get
+
+      - name: iOS Altyapisini Hazirla (0 Dependencies Fix)
+        script: |
+          # podhelper.rb dosyasını sertifika istemeden oluşturur
+          flutter build ios --config-only --no-codesign
+
+      - name: CocoaPods Kurulumu (Module Not Found Fix)
+        script: |
+          cd ios
+          # Eski ve hatalı kilitleri temizle
+          rm -rf Pods Podfile.lock
+          pod install --repo-update
+          cd ..
+
+      - name: Apple Sertifikalarini Yapilandir
+        script: |
+          # Parametreleri yukarıdaki 'ios_signing' ve 'groups' içinden otomatik çeker
+          xcode-project use-profiles
+
+      - name: Flutter IPA Build
+        script: |
+          # xcode-project use-profiles'ın ürettiği plist dosyasını kullanır
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        # Entegrasyon ismi yerine doğrudan panelden eklediğiniz değişkenleri kullanır
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
