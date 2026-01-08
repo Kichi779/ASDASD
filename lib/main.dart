@@ -1,22 +1,15 @@
-import 'dart:async';
+// lib/main.dart
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-
   FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
+    log('FLUTTER ERROR', error: details.exception, stackTrace: details.stack);
   };
-
-  runZonedGuarded(() {
-    runApp(const MyApp());
-  }, (error, stack) {
-    debugPrint('CRASH: $error');
-    debugPrintStack(stackTrace: stack);
-  });
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -40,37 +33,42 @@ class WebViewPage extends StatefulWidget {
 }
 
 class _WebViewPageState extends State<WebViewPage> {
-  late final WebViewController _controller;
+  late final WebViewController controller;
 
   bool isDarkTheme = false;
-  bool isLoading = true;
   bool showSocialButtons = true;
+  bool isLoading = true;
 
-  static const String homeUrl = 'https://www.alevi-vakfi.com/';
+  static const String homeUrl = "https://www.alevi-vakfi.com/";
 
   @override
   void initState() {
     super.initState();
     _loadTheme();
-    _initWebView();
-  }
 
-  void _initWebView() {
-    _controller = WebViewController()
+    controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) {
-            if (mounted) setState(() => isLoading = true);
+          onPageStarted: (url) {
+            log("PAGE STARTED: $url");
+            if (mounted) {
+              setState(() => isLoading = true);
+            }
           },
-          onPageFinished: (_) async {
+          onPageFinished: (url) async {
+            log("PAGE FINISHED: $url");
             if (!mounted) return;
+
             setState(() => isLoading = false);
-            await _injectTheme();
+            _injectTheme();
             await _checkCurrentUrl();
           },
           onWebResourceError: (error) {
-            debugPrint('WebView error: ${error.description}');
+            log(
+              "WEBVIEW ERROR",
+              error: error.description,
+            );
           },
         ),
       )
@@ -86,55 +84,55 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _toggleTheme() async {
+    setState(() => isDarkTheme = !isDarkTheme);
     final prefs = await SharedPreferences.getInstance();
-    isDarkTheme = !isDarkTheme;
     await prefs.setBool('isDarkTheme', isDarkTheme);
-    if (mounted) setState(() {});
-    await _injectTheme();
+    _injectTheme();
   }
 
-  Future<void> _injectTheme() async {
-    try {
-      final js = isDarkTheme
-          ? """
-            (function() {
-              if (document.getElementById('dark-style')) return;
-              var s = document.createElement('style');
-              s.id = 'dark-style';
-              s.innerHTML = `
-                body { background:#121212 !important; color:#fff !important; }
-                * { background:#121212 !important; color:#fff !important; }
-                a { color:#bb86fc !important; }
-                input, textarea, select { background:#333 !important; color:#fff !important; }
-              `;
-              document.head.appendChild(s);
-            })();
-          """
-          : """
-            (function() {
-              var s = document.getElementById('dark-style');
-              if (s) s.remove();
-            })();
-          """;
+  void _injectTheme() {
+    final String js = isDarkTheme
+        ? """
+        (function() {
+          if (document.getElementById('dark-style')) return;
+          var s = document.createElement('style');
+          s.id = 'dark-style';
+          s.innerHTML = `
+            body { background:#121212 !important; color:#fff !important; }
+            * { color:#fff !important; background:#121212 !important; }
+            a { color:#bb86fc !important; }
+            input,textarea,select { background:#333 !important; color:#fff !important; }
+          `;
+          document.head.appendChild(s);
+        })();
+        """
+        : """
+        (function() {
+          var s = document.getElementById('dark-style');
+          if (s) s.remove();
+        })();
+        """;
 
-      await _controller.runJavaScript(js);
-    } catch (e) {
-      debugPrint('JS inject error: $e');
-    }
+    controller.runJavaScript(js);
   }
 
   Future<void> _checkCurrentUrl() async {
-    try {
-      final url = await _controller.currentUrl();
-      if (!mounted || url == null) return;
+    final currentUrl = await controller.currentUrl();
+    log("CURRENT URL: $currentUrl");
 
-      setState(() {
-        showSocialButtons = url.startsWith(homeUrl);
-      });
-    } catch (_) {}
+    if (!mounted) return;
+
+    setState(() {
+      if (currentUrl == null) {
+        showSocialButtons = false;
+      } else {
+        showSocialButtons =
+            currentUrl == homeUrl || currentUrl.startsWith(homeUrl);
+      }
+    });
   }
 
-  static Future<void> _openExternalUrl(String url) async {
+  Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -146,16 +144,16 @@ class _WebViewPageState extends State<WebViewPage> {
     return Scaffold(
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
+          WebViewWidget(controller: controller),
           if (isLoading)
             const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(color: Colors.purple),
-                  SizedBox(height: 16),
+                  SizedBox(height: 20),
                   Text(
-                    'Yükleniyor...',
+                    "Yükleniyor...",
                     style: TextStyle(color: Colors.purple, fontSize: 16),
                   ),
                 ],
@@ -168,31 +166,33 @@ class _WebViewPageState extends State<WebViewPage> {
         children: [
           FloatingActionButton(
             mini: true,
-            backgroundColor: Colors.white.withOpacity(0.85),
-            onPressed: _toggleTheme,
+            backgroundColor: Colors.white.withOpacity(0.8),
             child: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode),
+            onPressed: _toggleTheme,
           ),
           const SizedBox(height: 16),
           if (showSocialButtons) ...[
             _SocialButton(
               color: const Color(0xFF1877F2),
               icon: Icons.facebook,
-              url: 'https://www.facebook.com/alevivakfi',
+              onTap: () => _openUrl("https://www.facebook.com/alevivakfi"),
             ),
             _SocialButton(
               color: const Color(0xFFE4405F),
               icon: Icons.camera_alt,
-              url: 'https://www.instagram.com/alevitischestiftung/',
+              onTap: () => _openUrl(
+                  "https://www.instagram.com/alevitischestiftung/"),
             ),
             _SocialButton(
               color: Colors.red,
               icon: Icons.play_arrow,
-              url: 'https://www.youtube.com/@uadevakfi/videos',
+              onTap: () =>
+                  _openUrl("https://www.youtube.com/@uadevakfi/videos"),
             ),
             _SocialButton(
               color: Colors.black,
-              label: 'X',
-              url: 'https://x.com/UADEVAKFI',
+              label: "X",
+              onTap: () => _openUrl("https://x.com/UADEVAKFI"),
             ),
             const SizedBox(height: 80),
           ],
@@ -206,13 +206,13 @@ class _SocialButton extends StatelessWidget {
   final Color color;
   final IconData? icon;
   final String? label;
-  final String url;
+  final VoidCallback onTap;
 
   const _SocialButton({
     required this.color,
-    required this.url,
     this.icon,
     this.label,
+    required this.onTap,
   });
 
   @override
@@ -222,10 +222,14 @@ class _SocialButton extends StatelessWidget {
       child: FloatingActionButton(
         mini: true,
         backgroundColor: color,
-        onPressed: () => _WebViewPageState._openExternalUrl(url),
+        onPressed: onTap,
         child: icon != null
             ? Icon(icon, color: Colors.white)
-            : Text(label ?? '', style: const TextStyle(color: Colors.white, fontSize: 20)),
+            : Text(
+          label ?? '',
+          style: const TextStyle(
+              color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
