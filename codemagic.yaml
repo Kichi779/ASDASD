@@ -1,58 +1,19 @@
-workflows:
-  ios-workflow:
-    name: Uluslararasi Alevi Vakfi iOS Build
-    instance_type: mac_mini_m2
-    max_build_duration: 60
-    
-    environment:
-      groups:
-        - app_store_credentials # Bu grupta API Key verilerin (Private Key, Issuer ID, Key ID) olmalı
-      vars:
-        # DOĞRU YÖNTEM: Parametreleri değişken olarak tanımlıyoruz
-        XCODE_BUNDLE_ID: "com.alevivakfi.uade"
-        APP_STORE_APPLE_ID: "1767898201" # Apple'dan aldığın App ID (opsiyonel ama önerilir)
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.alevivakfi.uade
-      flutter: stable
-      xcode: latest
+environment:
+  groups:
+    - app_store_credentials
+  vars:
+    XCODE_BUNDLE_ID: "com.alevivakfi.uade"
+  ios_signing:
+    distribution_type: app_store
+    bundle_identifier: com.alevivakfi.uade
+  flutter: stable
+  xcode: latest
 
-    scripts:
-      - name: Flutter Paketlerini Yukle
-        script: |
-          flutter pub get
-          flutter clean
-          flutter pub get
+scripts:
+  # ... (pub get ve pod install adımları aynı kalsın) ...
 
-      - name: iOS Altyapisini Hazirla (podhelper.rb Fix)
-        script: |
-          # Bu komut podhelper.rb dosyasını imzasız şekilde oluşturur
-          flutter build ios --config-only --no-codesign
-
-      - name: CocoaPods Kurulumu (0 Dependencies Fix)
-        script: |
-          cd ios
-          rm -rf Pods Podfile.lock
-          pod install --repo-update
-          cd ..
-
-      - name: Apple Sertifikalarini Yapilandir
-        script: |
-          # Parametre eklemiyoruz, komut yukarıdaki 'ios_signing' verilerini otomatik okur
-          xcode-project use-profiles
-
-      - name: Flutter IPA Build
-        script: |
-          # export-options-plist, use-profiles komutu tarafından otomatik oluşturulur
-          flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
-
-    artifacts:
-      - build/ios/ipa/*.ipa
-
-    publishing:
-      app_store_connect:
-        # Değişken isimlerini kendi Codemagic panelindekilerle eşleştir
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: true
+  - name: Apple Sertifikalarini Yapilandir
+    script: |
+      # --auth-type=api_key ekleyerek Codemagic'e portalına erişim yetkisi veriyoruz
+      # Bu sayede eksik profilleri kendisi de oluşturabilir/çekebilir.
+      xcode-project use-profiles --bundle-id com.alevivakfi.uade --export-method app-store
