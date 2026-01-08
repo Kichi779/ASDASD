@@ -6,36 +6,44 @@ workflows:
     
     environment:
       groups:
-        - app_store_credentials # Bu grupta APP_STORE_CONNECT_PRIVATE_KEY, KEY_IDENTIFIER ve ISSUER_ID olmalı
+        - app_store_credentials # Bu grupta API Key verilerin (Private Key, Issuer ID, Key ID) olmalı
       vars:
-        BUNDLE_ID: "com.alevivakfi.uade"
+        # DOĞRU YÖNTEM: Parametreleri değişken olarak tanımlıyoruz
+        XCODE_BUNDLE_ID: "com.alevivakfi.uade"
+        APP_STORE_APPLE_ID: "1767898201" # Apple'dan aldığın App ID (opsiyonel ama önerilir)
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.alevivakfi.uade
       flutter: stable
       xcode: latest
-      cocoapods: default
 
     scripts:
-      - name: Flutter SDK Paket Kurulumu
+      - name: Flutter Paketlerini Yukle
         script: |
           flutter pub get
           flutter clean
           flutter pub get
 
-      - name: iOS Yapılandırma ve Bağımlılık Onarımı (0 Dependencies Fix)
+      - name: iOS Altyapisini Hazirla (podhelper.rb Fix)
         script: |
-          # podhelper.rb dosyasını oluşturmak için kritik adım
+          # Bu komut podhelper.rb dosyasını imzasız şekilde oluşturur
           flutter build ios --config-only --no-codesign
+
+      - name: CocoaPods Kurulumu (0 Dependencies Fix)
+        script: |
           cd ios
           rm -rf Pods Podfile.lock
           pod install --repo-update
           cd ..
 
-      - name: Apple Sertifikalarını Yapılandır
+      - name: Apple Sertifikalarini Yapilandir
         script: |
-          # 'alevi-vakfi' ismini burada doğrudan referans veriyoruz
-          xcode-project use-profiles --bundle-id $BUNDLE_ID --export-method app-store
+          # Parametre eklemiyoruz, komut yukarıdaki 'ios_signing' verilerini otomatik okur
+          xcode-project use-profiles
 
       - name: Flutter IPA Build
         script: |
+          # export-options-plist, use-profiles komutu tarafından otomatik oluşturulur
           flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
@@ -43,7 +51,7 @@ workflows:
 
     publishing:
       app_store_connect:
-        # 'auth: integration' yerine doğrudan API Key bilgilerini kullanıyoruz
+        # Değişken isimlerini kendi Codemagic panelindekilerle eşleştir
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
